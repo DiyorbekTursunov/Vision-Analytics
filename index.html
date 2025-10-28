@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Vision Analytics Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a;--card:#111827;--muted:#94a3b8;--text:#e2e8f0;
+      --brand:#22c55e;--accent:#38bdf8;--danger:#ef4444;--warn:#f59e0b;
+      --ok:#10b981;--ring:rgba(56,189,248,.35);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(120deg,#0b1024,#0f172a 40%,#0b1024);
+      color:var(--text);font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+    .wrap{max-width:1200px;margin:24px auto;padding:0 16px}
+    .row{display:flex;gap:16px;flex-wrap:wrap}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.02));
+      backdrop-filter:blur(6px);border:1px solid rgba(148,163,184,.15);
+      border-radius:16px;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .title{font-size:24px;font-weight:700;letter-spacing:.3px}
+    .muted{color:var(--muted)}
+    .controls{gap:12px;align-items:end}
+    label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+    input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(148,163,184,.25);
+      background:#0b1224;color:var(--text);outline:none}
+    input:focus,select:focus{box-shadow:0 0 0 4px var(--ring);border-color:var(--accent)}
+    .btn{padding:10px 14px;border-radius:10px;border:1px solid rgba(148,163,184,.25);
+      background:linear-gradient(180deg,#0f213a,#0b1224);color:#e6f6ff;cursor:pointer;font-weight:600}
+    .btn.primary{background:linear-gradient(180deg,#0ea5e9,#0284c7);border:none}
+    .btn.ghost{background:transparent}
+    .kpi{flex:1 1 220px;min-width:200px}
+    .kpi .value{font-size:28px;font-weight:800;margin-top:6px}
+    .kpi.ok .value{color:var(--ok)} .kpi.warn .value{color:var(--warn)} .kpi.danger .value{color:var(--danger)}
+    .panel{flex:1 1 520px;min-width:320px}
+    .table-wrap{overflow:auto;max-height:420px;border-radius:12px;border:1px solid rgba(148,163,184,.2)}
+    table{width:100%;border-collapse:collapse;background:#0b1224}
+    th,td{padding:10px 12px;border-bottom:1px solid rgba(148,163,184,.15)}
+    th{position:sticky;top:0;background:#0f1a2f;text-align:left;font-weight:700}
+    .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px}
+    .pill.start{background:rgba(56,189,248,.15);color:#7dd3fc}
+    .pill.watch{background:rgba(34,197,94,.15);color:#86efac}
+    .pill.later{background:rgba(245,158,11,.15);color:#fbbf24}
+    .pill.wyes{background:rgba(16,185,129,.15);color:#6ee7b7}
+    .pill.wno{background:rgba(239,68,68,.15);color:#fca5a5}
+    .search{display:flex;gap:8px;margin-bottom:8px}
+    .footer{opacity:.6;margin-top:16px;font-size:12px}
+    .badge{padding:2px 8px;border-radius:8px;border:1px solid rgba(148,163,184,.25)}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media (max-width:900px){.grid-2{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div>
+        <div class="title">Vision Analytics</div>
+        <div class="muted">Bot oqimi metrikalari · Vanilla JS Dashboard</div>
+      </div>
+      <div><span class="badge" id="status-badge">Idle</span></div>
+    </div>
+
+    <!-- Controls (API Base olib tashlandi) -->
+    <div class="card">
+      <div class="row controls">
+        <div>
+          <label>From</label>
+          <input id="from" type="date"/>
+        </div>
+        <div>
+          <label>To</label>
+          <input id="to" type="date"/>
+        </div>
+        <div><button id="refresh" class="btn primary">Refresh</button></div>
+        <div><button id="today" class="btn ghost">Today</button></div>
+        <div><button id="last7" class="btn ghost">Last 7d</button></div>
+        <div><button id="last30" class="btn ghost">Last 30d</button></div>
+      </div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="row" style="margin-top:16px">
+      <div class="card kpi"><div class="muted">Users (total)</div><div class="value" id="k_total_users">—</div></div>
+      <div class="card kpi ok"><div class="muted">/start pressed</div><div class="value" id="k_start">—</div></div>
+      <div class="card kpi"><div class="muted">Watch clicked</div><div class="value" id="k_watch">—</div></div>
+      <div class="card kpi warn"><div class="muted">Later clicked</div><div class="value" id="k_later">—</div></div>
+      <div class="card kpi"><div class="muted">Watched 👍 / 👎</div><div class="value"><span id="k_wyes">—</span> / <span id="k_wno">—</span></div></div>
+      <div class="card kpi"><div class="muted">Feedbacks</div><div class="value" id="k_fb">—</div></div>
+    </div>
+
+    <!-- Charts -->
+    <div class="row" style="margin-top:16px">
+      <div class="card panel">
+        <div class="muted" style="margin-bottom:8px">Events over time</div>
+        <canvas id="chartTimeseries" height="200"></canvas>
+      </div>
+      <div class="card panel">
+        <div class="muted" style="margin-bottom:8px">Event type distribution</div>
+        <canvas id="chartPie" height="200"></canvas>
+      </div>
+    </div>
+
+    <!-- Tables -->
+    <div class="grid-2" style="margin-top:16px">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="muted">Recent events</div>
+          <div class="search">
+            <input id="searchEvents" placeholder="Search events…"/>
+            <button id="exportEvents" class="btn">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="tblEvents">
+            <thead><tr><th style="width:140px">Time</th><th style="width:110px">User</th><th style="width:140px">Event</th><th>Meta</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div class="muted">Feedbacks</div>
+          <div class="search">
+            <input id="searchFB" placeholder="Search feedbacks…"/>
+            <button id="exportFB" class="btn">Export CSV</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table id="tblFB">
+            <thead><tr><th style="width:140px">Time</th><th style="width:110px">User</th><th>Feedback</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer muted">© Vision Analytics · Vanilla JS · Chart.js</div>
+  </div>
+
+  <script>
+  (function(){
+    const $ = s=>document.querySelector(s);
+    const fmt = d=>new Date(d).toISOString().slice(0,10);
+    const today = new Date();
+    const seven = new Date(Date.now()-6*24*3600*1000);
+    const thirty = new Date(Date.now()-29*24*3600*1000);
+
+    // QAT’IY BACKEND MANZIL
+    const BASE_URL = "https://vision-analytics.asosit.uz/api/v1";
+
+    const inpFrom = $('#from'), inpTo = $('#to'), badge = $('#status-badge');
+    inpFrom.value = fmt(seven); inpTo.value = fmt(today);
+
+    let charts={ts:null,pie:null}, cache={events:[],feedbacks:[]};
+
+    function setBusy(b){
+      badge.textContent = b ? 'Loading…' : 'Ready';
+      badge.style.borderColor = b ? 'var(--accent)' : 'rgba(148,163,184,.25)';
+      badge.style.background = b ? 'rgba(56,189,248,.1)' : 'transparent';
+    }
+    function qs(obj){const p=new URLSearchParams(obj); return '?'+p.toString();}
+    async function api(path, params={}){
+      const url = BASE_URL.replace(/\/+$/,'') + path + qs(params);
+      const r = await fetch(url, {headers:{'Accept':'application/json'}});
+      if(!r.ok) throw new Error('HTTP '+r.status+' '+path);
+      return r.json();
+    }
+    function setText(id,v){ document.getElementById(id).textContent = v ?? '0'; }
+
+    function buildTSChart(labels,data){
+      const ctx=document.getElementById('chartTimeseries');
+      charts.ts && charts.ts.destroy();
+      charts.ts=new Chart(ctx,{type:'line',
+        data:{labels,datasets:[{label:'Events',data,tension:.25}]},
+        options:{responsive:true,plugins:{legend:{display:false}},
+          scales:{x:{ticks:{color:'#b6c3d5'}},y:{ticks:{color:'#b6c3d5'}}}}
+      });
+    }
+    function buildPieChart(labels,data){
+      const ctx=document.getElementById('chartPie');
+      charts.pie && charts.pie.destroy();
+      charts.pie=new Chart(ctx,{type:'pie',
+        data:{labels,datasets:[{data}]},
+        options:{plugins:{legend:{position:'bottom',labels:{color:'#b6c3d5'}}}}
+      });
+    }
+    function eventPill(ev){
+      const map={start:'start',watch_now:'watch',watch_simple:'watch',later:'later',watched_yes:'wyes',watched_no:'wno',feedback:'wyes'};
+      const cls=map[ev]||'start'; const name=(ev||'').replace('_',' ');
+      return `<span class="pill ${cls}">${name}</span>`;
+    }
+    function renderEvents(qText=''){
+      const tb=$('#tblEvents tbody'); tb.innerHTML=''; const q=qText.trim().toLowerCase();
+      for(const r of cache.events){
+        const rowStr=JSON.stringify(r).toLowerCase(); if(q && !rowStr.includes(q)) continue;
+        const meta=r.meta && typeof r.meta==='object'?JSON.stringify(r.meta):(r.meta??'');
+        tb.insertAdjacentHTML('beforeend',`
+          <tr>
+            <td>${(r.ts||'').replace('T',' ').replace('Z','')}</td>
+            <td>${r.user_id??''}</td>
+            <td>${eventPill(r.event)}</td>
+            <td style="white-space:nowrap;max-width:0">${meta}</td>
+          </tr>`);
+      }
+    }
+    function renderFB(qText=''){
+      const tb=$('#tblFB tbody'); tb.innerHTML=''; const q=qText.trim().toLowerCase();
+      for(const r of cache.feedbacks){
+        const body=r.feedback??r.text??''; const rowStr=((r.user_id||'')+' '+(r.ts||'')+' '+body).toLowerCase();
+        if(q && !rowStr.includes(q)) continue;
+        tb.insertAdjacentHTML('beforeend',`
+          <tr>
+            <td>${(r.ts||'').replace('T',' ').replace('Z','')}</td>
+            <td>${r.user_id??''}</td>
+            <td>${String(body).replace(/</g,'&lt;')}</td>
+          </tr>`);
+      }
+    }
+    function toCSV(rows, headers){
+      const head=headers.join(',');
+      const lines=rows.map(r=>headers.map(h=>{
+        const v=r[h]??''; const s=typeof v==='object'?JSON.stringify(v):String(v);
+        const needQ = s.includes(',')||s.includes('"')||s.includes('\n');
+        return needQ?'"'+s.replace(/"/g,'""')+'"':s;
+      }).join(','));
+      return [head,...lines].join('\n');
+    }
+    function download(name,text){
+      const blob=new Blob([text],{type:'text/csv;charset=utf-8'});
+      const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); URL.revokeObjectURL(a.href);
+    }
+
+    async function loadAll(){
+      setBusy(true);
+      const from=inpFrom.value, to=inpTo.value;
+      try{
+        const [summary,ts,dist,events,fbs]=await Promise.all([
+          api('/metrics/summary',{from,to}),
+          api('/metrics/timeseries',{from,to,bucket:'day'}),
+          api('/metrics/distribution',{from,to}),
+          api('/events',{from,to,limit:200}),
+          api('/feedbacks',{from,to,limit:200})
+        ]);
+        const S=summary||{};
+        setText('k_total_users', S.total_users ?? 0);
+        setText('k_start', S.started ?? S.start ?? 0);
+        setText('k_watch', S.watch_clicked ?? S.watch ?? 0);
+        setText('k_later', S.later_clicked ?? S.later ?? 0);
+        setText('k_wyes', S.watched_yes ?? 0);
+        setText('k_wno', S.watched_no ?? 0);
+        setText('k_fb', S.feedbacks ?? 0);
+
+        const tsItems=(ts.items||ts||[]);
+        buildTSChart(tsItems.map(x=>x.date), tsItems.map(x=>x.count));
+
+        const distItems=(dist.items||dist||[]);
+        buildPieChart(distItems.map(x=>x.event), distItems.map(x=>x.count));
+
+        cache.events=(events.items||events||[]).map(e=>({ts:e.ts||e.time||e.created_at,user_id:e.user_id,event:e.event,meta:e.meta}));
+        cache.feedbacks=(fbs.items||fbs||[]).map(f=>({ts:f.ts||f.time||f.created_at,user_id:f.user_id,feedback:f.feedback||f.text}));
+        renderEvents($('#searchEvents').value);
+        renderFB($('#searchFB').value);
+      }catch(e){
+        console.error(e); alert('Fetch error: '+e.message);
+      }finally{ setBusy(false); }
+    }
+
+    // buttons
+    $('#refresh').onclick=loadAll;
+    $('#today').onclick=()=>{inpFrom.value=fmt(new Date()); inpTo.value=fmt(new Date()); loadAll();};
+    $('#last7').onclick=()=>{inpFrom.value=fmt(seven); inpTo.value=fmt(new Date()); loadAll();};
+    $('#last30').onclick=()=>{inpFrom.value=fmt(thirty); inpTo.value=fmt(new Date()); loadAll();};
+
+    // search & export
+    $('#searchEvents').oninput=e=>renderEvents(e.target.value);
+    $('#searchFB').oninput=e=>renderFB(e.target.value);
+    $('#exportEvents').onclick=()=>download('events.csv', toCSV(cache.events,['ts','user_id','event','meta']));
+    $('#exportFB').onclick=()=>download('feedbacks.csv', toCSV(cache.feedbacks,['ts','user_id','feedback']));
+
+    loadAll();
+  })();
+  </script>
+</body>
+</html>
