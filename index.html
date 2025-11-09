@@ -62,7 +62,7 @@
       <div><span class="badge" id="status-badge">Idle</span></div>
     </div>
 
-    <!-- Controls (API Base olib tashlandi) -->
+    <!-- Controls -->
     <div class="card">
       <div class="row controls">
         <div>
@@ -84,9 +84,12 @@
     <div class="row" style="margin-top:16px">
       <div class="card kpi"><div class="muted">Users (total)</div><div class="value" id="k_total_users">—</div></div>
       <div class="card kpi ok"><div class="muted">/start pressed</div><div class="value" id="k_start">—</div></div>
-      <div class="card kpi"><div class="muted">Watch clicked</div><div class="value" id="k_watch">—</div></div>
+      <div class="card kpi"><div class="muted">Watch Now</div><div class="value" id="k_watch_now">—</div></div>
+      <div class="card kpi"><div class="muted">Watch Simple</div><div class="value" id="k_watch_simple">—</div></div>
       <div class="card kpi warn"><div class="muted">Later clicked</div><div class="value" id="k_later">—</div></div>
-      <div class="card kpi"><div class="muted">Watched 👍 / 👎</div><div class="value"><span id="k_wyes">—</span> / <span id="k_wno">—</span></div></div>
+      <div class="card kpi ok"><div class="muted">Watched Yes 👍</div><div class="value" id="k_wyes">—</div></div>
+      <div class="card kpi danger"><div class="muted">Watched No 👎</div><div class="value" id="k_wno">—</div></div>
+      <div class="card kpi"><div class="muted">Feedback Button</div><div class="value" id="k_fb_button">—</div></div>
       <div class="card kpi"><div class="muted">Feedbacks</div><div class="value" id="k_fb">—</div></div>
     </div>
 
@@ -148,7 +151,7 @@
     const seven = new Date(Date.now()-6*24*3600*1000);
     const thirty = new Date(Date.now()-29*24*3600*1000);
 
-    // QAT’IY BACKEND MANZIL
+    // QAT'IY BACKEND MANZIL
     const BASE_URL = "https://vision-analytics.asosit.uz/api/v1";
 
     const inpFrom = $('#from'), inpTo = $('#to'), badge = $('#status-badge');
@@ -168,7 +171,11 @@
       if(!r.ok) throw new Error('HTTP '+r.status+' '+path);
       return r.json();
     }
-    function setText(id,v){ document.getElementById(id).textContent = v ?? '0'; }
+    function setText(id,v){
+      const el = document.getElementById(id);
+      if(el) el.textContent = v ?? '0';
+      else console.warn('Element not found:', id);
+    }
 
     function buildTSChart(labels,data){
       const ctx=document.getElementById('chartTimeseries');
@@ -188,8 +195,8 @@
       });
     }
     function eventPill(ev){
-      const map={start:'start',watch_now:'watch',watch_simple:'watch',later:'later',watched_yes:'wyes',watched_no:'wno',feedback:'wyes'};
-      const cls=map[ev]||'start'; const name=(ev||'').replace('_',' ');
+      const map={start:'start',watch_now:'watch',watch_simple:'watch',later:'later',watched_yes:'wyes',watched_no:'wno',feedback:'wyes',feedback_button_clicked:'wyes'};
+      const cls=map[ev]||'start'; const name=(ev||'').replace(/_/g,' ');
       return `<span class="pill ${cls}">${name}</span>`;
     }
     function renderEvents(qText=''){
@@ -244,19 +251,41 @@
           api('/events',{from,to,limit:200}),
           api('/feedbacks',{from,to,limit:200})
         ]);
+
+        // Get distribution data first (needed for KPI calculations)
+        let distItems = (dist.items || dist || []);
+        console.log('Raw distribution data:', JSON.stringify(distItems));
+
+        // Filter out job_error from distribution
+        distItems = distItems.filter(x => {
+          const eventName = String(x.event || '').toLowerCase().trim();
+          return eventName !== 'job_error';
+        });
+
+        console.log('Filtered distribution:', distItems);
+
         const S=summary||{};
+        console.log('Summary API response:', JSON.stringify(S));
+
+        // Calculate watch_now and watch_simple from distribution since summary doesn't split them
+        const watchNowCount = distItems.find(x => x.event === 'watch_now')?.count || 0;
+        const watchSimpleCount = distItems.find(x => x.event === 'watch')?.count || 0;
+        const feedbackButtonCount = distItems.find(x => x.event === 'feedback_button_clicked')?.count || 0;
+
         setText('k_total_users', S.total_users ?? 0);
-        setText('k_start', S.started ?? S.start ?? 0);
-        setText('k_watch', S.watch_clicked ?? S.watch ?? 0);
-        setText('k_later', S.later_clicked ?? S.later ?? 0);
+        setText('k_start', S.start ?? 0);
+        setText('k_watch_now', watchNowCount);
+        setText('k_watch_simple', watchSimpleCount);
+        setText('k_later', S.later ?? 0);
         setText('k_wyes', S.watched_yes ?? 0);
         setText('k_wno', S.watched_no ?? 0);
+        setText('k_fb_button', feedbackButtonCount);
         setText('k_fb', S.feedbacks ?? 0);
 
         const tsItems=(ts.items||ts||[]);
         buildTSChart(tsItems.map(x=>x.date), tsItems.map(x=>x.count));
 
-        const distItems=(dist.items||dist||[]);
+        // distItems already filtered above
         buildPieChart(distItems.map(x=>x.event), distItems.map(x=>x.count));
 
         cache.events=(events.items||events||[]).map(e=>({ts:e.ts||e.time||e.created_at,user_id:e.user_id,event:e.event,meta:e.meta}));
